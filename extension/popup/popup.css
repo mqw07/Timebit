@@ -1,0 +1,99 @@
+:root {
+  color-scheme: light;
+  --background: #e9edf2;
+  --surface: #f6f8fb;
+  --ink: #20242b;
+  --accent: #17191d;
+  --muted: #465262;
+  --tint: #d5dde7;
+  --border: #aebaca;
+  --radius: 10px;
+  font: 14px/1.5 Inter, "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--background);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; width: 390px; max-height: 600px; padding: 14px 22px 22px; overflow-y: auto; }
+p, h1 { margin: 0; }
+h1 { font-size: 22px; line-height: 1.25; margin: 12px 0 6px; }
+button, input, select {
+  color: inherit;
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+button { min-height: 36px; cursor: pointer; padding: 6px 12px; }
+button:hover:not(:disabled), select:hover:not(:disabled) { background: #fff; border-color: #8290a3; }
+button:disabled, select:disabled { opacity: .57; cursor: default; }
+:focus-visible { outline: 2px solid #385d84; outline-offset: 2px; }
+svg { width: 20px; height: 20px; flex: none; }
+
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.mark { display: block; }
+.icon-button { display: grid; place-items: center; width: 36px; padding: 6px; }
+.gear { background: transparent; border-color: transparent; }
+.message { margin-bottom: 8px; color: var(--muted); }
+.message:empty { display: none; }
+
+.timer-view { display: grid; justify-items: center; }
+#mode {
+  width: 186px;
+  min-height: 35px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+.phase {
+  min-width: 194px;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 3px 14px;
+  border-radius: 99px;
+  background: var(--tint);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+.dial { position: relative; display: grid; place-items: center; width: 144px; height: 144px; margin: 14px 0 5px; }
+.dial svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dial circle { fill: none; stroke-width: 9; }
+.track { stroke: var(--tint); }
+#progress { stroke: var(--accent); stroke-linecap: round; }
+#countdown { font-size: 38px; line-height: 1; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+#countdown[data-wide] { font-size: 24px; max-width: 120px; overflow-wrap: anywhere; text-align: center; }
+.next { color: var(--muted); font-size: 16px; text-align: center; }
+.timer-controls { width: min(100%, 268px); display: grid; grid-template-columns: 45px 1fr 45px; gap: 8px; margin-top: 14px; }
+.timer-controls button { display: flex; justify-content: center; align-items: center; gap: 6px; padding-inline: 6px; font-weight: 650; }
+#primary { font-size: 16px; }
+
+.back { min-height: 30px; border-radius: 99px; }
+.back span { margin-left: 5px; }
+.intro, .helper { color: var(--muted); }
+.intro { margin-bottom: 14px; }
+.helper { margin: 12px 0 0; }
+.mode-list { display: grid; gap: 10px; }
+.mode-card { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 13px; }
+.mode-card strong, .mode-card span > span { display: block; }
+.mode-card strong { font-size: 17px; margin-bottom: 2px; }
+.mode-card span > span { color: var(--muted); }
+.mode-card[data-active] { background: #e0e7f0; border-color: #79889c; }
+.chevron { font-size: 22px; line-height: 1; }
+
+form { display: grid; }
+.fields { display: grid; gap: 6px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 88px 67px; gap: 3px 7px; align-items: center; padding: 6px 9px; border-radius: var(--radius); background: var(--surface); }
+.field label, legend { font-weight: 600; }
+.unit { color: var(--muted); font-size: 12px; }
+input { min-height: 32px; width: 100%; padding: 3px 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
+input[aria-invalid="true"] { border-color: #a33038; }
+.field-error { grid-column: 1 / -1; font-size: 13px; color: #8d242d; }
+fieldset { border: 0; padding: 0; margin: 6px 0 12px; min-width: 0; }
+legend { padding: 0; margin-bottom: 6px; }
+.sequence { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+fieldset .field-error { margin-top: 6px; }
+.save { width: 100%; margin-top: 16px; font-size: 15px; font-weight: 650; }

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Timebit timer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="toolbar">
+    <img class="mark" src="../assets/timbit.svg" alt="" width="25" height="25">
+    <button class="icon-button gear" type="button" data-page="modes" aria-label="Timing settings" title="Timing settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 4 1-2h4l1 2 2 .9 2.2-.4 1.9 3.3-1.3 1.7v2.8l1.3 1.8-1.9 3.3-2.2-.4-2 1-1 2h-4l-1-2-2-1-2.2.4-1.9-3.3 1.3-1.8V9.5L2.9 7.8l1.9-3.3 2.2.4z" transform="translate(0 1)"/>
+        <circle cx="12" cy="12" r="3.1"/>
+      </svg>
+    </button>
+  </header>
+  <main>
+    <p id="message" role="status" class="message">Loading timer…</p>
+    <button id="retry" type="button" hidden>Retry</button>
+    <section data-view="timer" class="timer-view" aria-label="Timer" hidden>
+      <select id="mode" aria-label="Timing mode">
+        <option value="pomodoro">Pomodoro</option>
+        <option value="cascade">Cascade</option>
+      </select>
+      <p id="phase" class="phase" aria-live="polite"></p>
+      <div class="dial">
+        <svg viewBox="0 0 144 144" aria-hidden="true">
+          <circle class="track" cx="72" cy="72" r="65"/>
+          <circle id="progress" cx="72" cy="72" r="65" pathLength="100" transform="rotate(-90 72 72)"/>
+        </svg>
+        <span id="countdown" role="timer"></span>
+      </div>
+      <p id="next" class="next"></p>
+      <div class="timer-controls">
+        <button type="button" data-command="timer.reset" aria-label="Reset current phase" title="Reset current phase">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4a8 8 0 1 1-7.4 5M12 4H8m4 0V1"/>
+          </svg>
+        </button>
+        <button type="button" id="primary" data-command="timer.start">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+            <path id="play-icon" d="M8 5v14l11-7z"/>
+            <path id="pause-icon" d="M7 5h4v14H7zm6 0h4v14h-4z" hidden/>
+          </svg>
+          <span id="primary-label">Start</span>
+        </button>
+        <button type="button" data-command="timer.skip" aria-label="Skip current phase" title="Skip current phase">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+            <path d="M4 5v14l8-7zm8 0v14l8-7z"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <section data-view="modes" hidden>
+      <button type="button" class="back" data-page="timer">← <span>Timer</span></button>
+      <h1 tabindex="-1">Timing modes</h1>
+      <p class="intro">Choose a mode to adjust its timing.</p>
+      <div class="mode-list">
+        <button type="button" class="mode-card" data-page="pomodoro">
+          <span><strong>Pomodoro</strong><span id="pomodoro-summary"></span><span id="pomodoro-long"></span></span>
+          <span class="chevron" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="mode-card" data-page="cascade">
+          <span><strong>Cascade</strong><span id="cascade-summary"></span><span id="cascade-breaks"></span></span>
+          <span class="chevron" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </section>
+
+    <section data-view="pomodoro" hidden>
+      <button type="button" class="back" data-page="modes">← <span>Timing modes</span></button>
+      <h1 tabindex="-1">Pomodoro</h1>
+      <p class="intro">Set your study and break lengths.</p>
+      <form data-mode="pomodoro" novalidate>
+        <div class="fields" data-fields></div>
+        <p class="helper">Each phase starts when you press Start.</p>
+        <button class="save" type="submit">Save changes</button>
+      </form>
+    </section>
+
+    <section data-view="cascade" hidden>
+      <button type="button" class="back" data-page="modes">← <span>Timing modes</span></button>
+      <h1 tabindex="-1">Cascade</h1>
+      <form data-mode="cascade" novalidate>
+        <fieldset>
+          <legend>Study blocks · minutes</legend>
+          <div class="sequence" data-sequence></div>
+          <p class="field-error" id="sequence-error" role="alert" hidden></p>
+        </fieldset>
+        <div class="fields" data-fields></div>
+        <p class="helper">A long break follows the final study block, then the sequence repeats.</p>
+        <p class="helper">Each phase starts when you press Start.</p>
+        <button class="save" type="submit">Save changes</button>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
