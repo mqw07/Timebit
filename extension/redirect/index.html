@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Focus · Timebit</title>
+  <link rel="icon" href="../assets/timbit.svg">
+  <link rel="stylesheet" href="../popup/popup.css">
+  <link rel="stylesheet" href="redirect.css">
+</head>
+<body hidden>
+  <main class="focus-layout">
+    <section class="focus-panel" aria-labelledby="heading">
+      <img class="mark" src="../assets/timbit.svg" width="28" height="28" alt="">
+      <h1 id="heading">Don’t give up.</h1>
+      <p id="reason" class="helper" role="status">Checking your study timer…</p>
+      <div id="focus-time" class="dial" hidden>
+        <svg viewBox="0 0 144 144" aria-hidden="true">
+          <circle class="track" cx="72" cy="72" r="65"/>
+          <circle id="progress" cx="72" cy="72" r="65" pathLength="100" transform="rotate(-90 72 72)"/>
+        </svg>
+        <span id="countdown" role="timer" aria-label="Study time remaining"></span>
+      </div>
+      <button id="return-to-study" type="button">Return to study</button>
+      <p id="message" class="message" role="status"></p>
+      <p id="site-help" class="helper" hidden>To allow a site during study, remove it from your distraction list in Timebit.</p>
+    </section>
+    <section id="focus-tasks" class="focus-panel" aria-labelledby="task-heading" hidden>
+      <h2 id="task-heading">Tasks</h2>
+      <div data-checklist></div>
+    </section>
+  </main>
+  <template id="checklist-template">
+    <form class="task-add">
+      <input name="text" type="text" placeholder="New task" aria-label="New task" required>
+      <button type="submit">Add task</button>
+    </form>
+    <ul class="task-list" aria-label="Tasks" hidden></ul>
+  </template>
+  <template id="task-row-template">
+    <li class="task-row">
+      <label class="task-label"><input type="checkbox"><span></span></label>
+      <button type="button" data-task-action="edit">Edit</button>
+      <button type="button" data-task-action="delete">Delete</button>
+    </li>
+  </template>
+  <dialog id="edit-task" aria-labelledby="edit-task-title">
+    <h2 id="edit-task-title">Edit task</h2>
+    <form>
+      <label for="edit-task-text">Task name</label>
+      <input id="edit-task-text" name="text" type="text" required autofocus>
+      <p class="message" role="status"></p>
+      <div class="task-actions">
+        <button type="button" data-close-dialog>Cancel</button>
+        <button type="submit">Save task</button>
+      </div>
+    </form>
+  </dialog>
+  <script type="module" src="redirect.js"></script>
+</body>
+</html>

@@ -1,14 +1,75 @@
-import { MODE_NAMES, PHASE_NAMES, MINUTE_MS } from "../core/modes.js";
-import { nextPhase, remainingMs, STATE_KEY } from "../core/timer.js";
+import { MODE_NAMES, PHASE_NAMES, MINUTE_MS, DEFAULT_SOUND_VOLUME } from "../core/modes.js";
+import { POPUP_ROUTE_KEY } from "../core/navigation.js";
+import { buildPlanSchedule, createPlanPattern, localFinishTime, validatePlanDraft } from "../core/planner.js";
+import { formatStudyDuration, studiedTodayMs } from "../core/study-time.js";
+import { formatCountdown, formatOvertime, nextPhase, overtimeMs, remainingMs, STATE_KEY } from "../core/timer.js";
+import { createChecklists } from "./checklist.js";
+import { createDistractionControls } from "./distractions.js";
+import { renderProgress } from "./progress.js";
 
 const byId = (id) => document.getElementById(id);
-const views = [...document.querySelectorAll("[data-view]")];
-const forms = [...document.forms];
+const views = new Map([...document.querySelectorAll("[data-view]")].map((view) => [view.dataset.view, view]));
+const forms = [...document.querySelectorAll("form[data-mode]")];
+const plannerForm = byId("planner-form");
+const renderChecklists = createChecklists((command, status) => send(command, { status }));
+const renderDistractionControls = createDistractionControls((command, options) => send(command, options));
 
 let state;
 let page = "timer";
 let busy = false;
+let pendingCommand;
 let readAfter = 0;
+let toolbarPopup = false;
+let initialRoute = "timer";
+
+function planDraft(now) {
+  const { finish, mode, study, shortBreak } = plannerForm.elements;
+  return { finishAt: localFinishTime(finish.value, now), mode: mode.value,
+    study: study.valueAsNumber, shortBreak: shortBreak.valueAsNumber };
+}
+
+function previewPlan(now) {
+  const draft = planDraft(now);
+  const errors = validatePlanDraft(draft, now);
+  const { finish } = errors;
+  const budget = draft.finishAt - now;
+  byId("plan-available").textContent = finish
+    ? (plannerForm.elements.finish.value ? finish : "Choose a finish time later today.")
+    : `${Math.floor(budget / MINUTE_MS)} min available`;
+  const summary = byId("plan-summary");
+  if (Object.keys(errors).length) {
+    summary.textContent = "";
+    return;
+  }
+  const pattern = createPlanPattern(draft, state.settings[draft.mode]);
+  const studies = buildPlanSchedule(pattern, budget).filter(({ phase }) => phase === "study");
+  const studyTime = studies.reduce((total, { durationMs }) => total + durationMs, 0);
+  summary.textContent = `${studies.length} study ${studies.length === 1 ? "block" : "blocks"} · ${formatStudyDuration(studyTime)} study · ${formatStudyDuration(budget - studyTime)} breaks`;
+}
+
+function loadPlanPreferences() {
+  const { mode, study, shortBreak } = plannerForm.elements;
+  const settings = state.settings[mode.value];
+  study.value = Math.max(1, Array.isArray(settings.study) ? settings.study[0] : settings.study);
+  shortBreak.value = Math.max(1, settings.shortBreak);
+}
+
+function openPlanner() {
+  const { planner, timer } = state;
+  const { finish, mode, study, shortBreak } = plannerForm.elements;
+  mode.value = timer.mode;
+  loadPlanPreferences();
+  finish.value = "";
+  if (planner) {
+    study.value = planner.study;
+    shortBreak.value = planner.shortBreak;
+    const date = new Date(planner.finishAt);
+    const localTime = [date.getHours(), date.getMinutes()].map((part) => String(part).padStart(2, "0")).join(":");
+    if (localFinishTime(localTime, Date.now()) === planner.finishAt && planner.finishAt > Date.now()) finish.value = localTime;
+  }
+  byId("plan-error").textContent = "";
+  previewPlan(Date.now());
+}
 
 function addInput(container, mode, name, label, unit, sequence = false) {
   const input = document.createElement("input");
@@ -81,8 +142,17 @@ function showErrors(form, errors = {}) {
   inputs.find((input) => input.getAttribute("aria-invalid") === "true")?.focus();
 }
 
-function openPage(nextPage, focus = true) {
-  page = nextPage;
+function openPage(requestedRoute, { focus = true, remember = true } = {}) {
+  const route = views.has(requestedRoute) || requestedRoute === "settings/tasks" ? requestedRoute : "timer";
+  const tasksFromSettings = route === "settings/tasks";
+  page = tasksFromSettings ? "tasks" : route;
+  if (page === "planner") openPlanner();
+  if (page === "tasks") {
+    const back = byId("tasks-back");
+    back.dataset.page = tasksFromSettings ? "settings" : "timer";
+    back.setAttribute("aria-label", `Back to ${back.dataset.page}`);
+    back.querySelector("span").textContent = tasksFromSettings ? "Settings" : "Timer";
+  }
   const form = forms.find((item) => item.dataset.mode === page);
   if (form) {
     const values = state.settings[page];
@@ -93,43 +163,106 @@ function openPage(nextPage, focus = true) {
     }
     showErrors(form);
   }
-  for (const view of views) view.hidden = view.dataset.view !== page;
-  if (focus) document.querySelector(`[data-view="${page}"] h1, [data-view="${page}"] select`)?.focus();
+  for (const [name, view] of views) view.hidden = name !== page;
+  document.body.scrollTop = 0;
+  document.scrollingElement.scrollTop = 0;
+  if (focus) views.get(page).querySelector("h1:not([hidden]), select")?.focus();
+
+  if (toolbarPopup) {
+    if (remember) chrome.storage.session.set({ [POPUP_ROUTE_KEY]: { route } }).catch(() => {});
+  } else {
+    const url = new URL(location.href);
+    url.hash = route === "timer" ? "" : route;
+    if (url.href !== location.href) history.replaceState(null, "", url);
+  }
 }
 
-function formatCountdown(milliseconds) {
-  const seconds = Math.ceil(milliseconds / 1000);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+function openPendingCheckIn() {
+  if (page === "timer" || state.timer.completedPhase !== "study" || state.settings.openStudyCheckIn === false) return;
+  const dialog = document.querySelector("dialog[open]");
+  if (dialog) dialog.addEventListener("close", openPendingCheckIn, { once: true });
+  else openPage("timer");
 }
 
-function updateCountdown(now) {
+function updateTimerDisplay(now) {
   const { timer } = state;
-  const remaining = remainingMs(timer, now);
-  const text = formatCountdown(remaining);
+  const overtime = overtimeMs(timer, now);
+  const remaining = overtime === null ? remainingMs(timer, now) : 0;
+  const text = overtime === null ? formatCountdown(remaining) : formatOvertime(overtime);
   const countdown = byId("countdown");
   if (countdown.textContent !== text) countdown.textContent = text;
-  countdown.toggleAttribute("data-wide", text.length > 5);
-  const progress = byId("progress");
-  const percent = 100 * remaining / timer.durationMs;
-  progress.style.strokeDasharray = percent >= 100 ? "none" : `${percent} 100`;
-  progress.style.visibility = percent > 0 ? "visible" : "hidden";
+  countdown.toggleAttribute("data-wide", text.length > (overtime === null ? 5 : 6));
+  renderProgress(byId("progress"), remaining, timer.durationMs);
+
+  const footer = byId("study-today");
+  const total = `Today · ${formatStudyDuration(studiedTodayMs(state, now))} studied`;
+  if (footer.textContent !== total) footer.textContent = total;
+}
+
+function showVolume() {
+  const slider = byId("sound-volume");
+  const label = `${slider.value}%`;
+  slider.style.setProperty("--volume", label);
+  slider.setAttribute("aria-valuetext", label);
+  byId("sound-volume-value").value = label;
+}
+
+function renderFeedbackSettings(settings) {
+  const volume = settings.soundVolume ?? DEFAULT_SOUND_VOLUME;
+  const muted = settings.soundMuted === true;
+  byId("completion-notifications").checked = settings.completionNotifications !== false;
+  byId("open-study-check-in").checked = settings.openStudyCheckIn !== false;
+  byId("mute-sounds").checked = muted;
+  const slider = byId("sound-volume");
+  if (!slider.matches(":active")) slider.value = volume;
+  showVolume();
+  byId("preview-chime").disabled = busy || muted || volume === 0;
 }
 
 function render() {
-  const { timer, settings } = state;
+  const { timer, settings, planner } = state;
   const pomodoro = settings.pomodoro;
   const cascade = settings.cascade;
   const running = timer.status === "running";
+  const finished = timer.status === "finished";
   const study = timer.phase === "study";
   const block = timer.mode === "pomodoro"
     ? Math.min(timer.pomodoroCycle + 1, pomodoro.longBreakEvery)
     : timer.cascadeIndex + 1;
   const total = timer.mode === "pomodoro" ? pomodoro.longBreakEvery : cascade.study.length;
   const label = study ? "Focus" : timer.phase === "shortBreak" ? "Short break" : "Long break";
-  byId("phase").textContent = `${timer.status === "paused" ? "Paused · " : ""}${label}${study ? ` · Block ${block} of ${total}` : ""}`;
-  const upcoming = nextPhase(timer, settings);
-  byId("next").textContent = `Next: ${upcoming.durationMs / MINUTE_MS} min ${PHASE_NAMES[upcoming.phase]}`;
-  byId("mode").value = timer.mode;
+  const checkIn = timer.completedPhase === "study";
+  const overtime = timer.expiredAt != null;
+  byId("check-in-heading").hidden = !checkIn;
+  byId("overtime-label").hidden = !overtime;
+  const upcoming = planner ? planner.phases[1] : nextPhase(timer, settings);
+  byId("next").hidden = checkIn || overtime || !upcoming;
+  const skip = document.querySelector('[data-command="timer.skip"]');
+  skip.title = checkIn && !study ? "Skip break" : "Skip current phase";
+  skip.setAttribute("aria-label", skip.title);
+  const blockNumber = planner ? (planner.phases[0]?.index ?? 0) + 1 : block;
+  const phase = `${label}${study ? ` · Block ${blockNumber}${planner ? "" : ` of ${total}`}` : ""}`;
+  byId("phase").textContent = finished ? "Plan complete"
+    : overtime ? `Next: ${phase} · ${formatCountdown(timer.durationMs)}`
+      : `${timer.status === "paused" ? "Paused · " : ""}${phase}`;
+  const duration = upcoming && (planner ? formatStudyDuration(upcoming.durationMs) : `${upcoming.durationMs / MINUTE_MS} min`);
+  byId("next").textContent = upcoming ? `Next: ${duration} ${PHASE_NAMES[upcoming.phase]}` : "";
+  byId("mode").value = planner ? "planner" : timer.mode;
+  document.querySelector(".timer-controls").hidden = finished;
+  byId("plan-info").hidden = !planner;
+  const planNotice = byId("plan-adjusted");
+  planNotice.hidden = finished ? !planner?.tooLittleTime : !planner?.adjusted;
+  planNotice.textContent = finished ? "There is less than a minute left for a new study block." : "Plan adjusted to fit your deadline.";
+  byId("edit-plan").textContent = finished ? "New plan" : "Edit plan";
+  if (planner) {
+    const finish = new Date(planner.finishAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    byId("plan-deadline").textContent = `Finish by ${finish}`;
+  }
+  const replace = byId("plan-replace");
+  replace.hidden = finished || (!planner && timer.status === "ready");
+  replace.textContent = planner ? "Applying a new plan replaces the current plan." : "Applying a plan replaces the current timer.";
+  renderFeedbackSettings(settings);
+  renderDistractionControls(settings);
   byId("primary").dataset.command = running ? "timer.pause" : "timer.start";
   byId("primary-label").textContent = running ? "Pause" : timer.status === "paused" ? "Resume" : "Start";
   byId("play-icon").toggleAttribute("hidden", running);
@@ -145,25 +278,45 @@ function render() {
     const name = MODE_NAMES[card.dataset.page];
     card.setAttribute("aria-label", `Edit ${name} settings${selected ? ", current mode" : ""}`);
   }
-  updateCountdown(Date.now());
+  renderChecklists(state.tasks ?? [], state.tasksRevision ?? 0);
+  updateTimerDisplay(Date.now());
 }
 
 function adopt(next) {
-  if (state && next.revision < state.revision) return;
+  if (state && (next.revision < state.revision || (next.tasksRevision ?? 0) < (state.tasksRevision ?? 0))) return;
   const first = !state;
+  const newCheckIn = next.timer.completedPhase === "study" && next.delivery?.runId !== state?.delivery?.runId;
   state = next;
   render();
-  if (first) openPage("timer", false);
+  if (first) {
+    const readyAfterCompletion = toolbarPopup && Boolean(next.timer.completedPhase);
+    const route = readyAfterCompletion ? "timer" : initialRoute;
+    openPage(route, { focus: readyAfterCompletion || route !== "timer", remember: false });
+  } else if (toolbarPopup && newCheckIn) {
+    openPendingCheckIn();
+  }
 }
 
-async function send(command, form) {
-  if (busy) return;
+async function send(command, options) {
+  // An automatic refresh can wait. Preserve deliberate actions taken while a save is in flight.
+  if (command.type === "state.get" && pendingCommand) return false;
+  const dispatch = () => sendCommand(command, options);
+  const pending = pendingCommand ? pendingCommand.then(dispatch, dispatch) : dispatch();
+  pendingCommand = pending;
+  try {
+    return await pending;
+  } finally {
+    if (pendingCommand === pending) pendingCommand = undefined;
+  }
+}
+
+async function sendCommand(command, { form, status = byId("message") } = {}) {
   busy = true;
-  const message = byId("message");
   const retry = byId("retry");
-  const controls = [...document.querySelectorAll("[data-command], [type=submit], #mode")];
+  const volumeFocused = document.activeElement === byId("sound-volume");
+  const controls = [...document.querySelectorAll("[data-command], [type=submit], #mode, [data-feedback-setting], [data-block-setting]")];
   for (const control of controls) control.disabled = true;
-  message.textContent = "";
+  status.textContent = "";
   retry.hidden = true;
   try {
     const response = await chrome.runtime.sendMessage({ app: "timebit", command });
@@ -171,19 +324,30 @@ async function send(command, form) {
     if (!response?.state) {
       throw new Error(response?.error ?? "The timer is unavailable. Try again.");
     }
-    if (response.error) message.textContent = response.error;
-    else if (response.errors && form) showErrors(form, response.errors);
-    else if (form && page === form.dataset.mode) {
-      openPage("modes");
-      message.textContent = "Settings saved.";
+    if (response.error) {
+      status.textContent = response.error;
+      return false;
     }
+    if (response.errors && form) {
+      showErrors(form, response.errors);
+      return false;
+    }
+    if (form && page === form.dataset.mode) {
+      openPage("modes");
+      status.textContent = "Settings saved.";
+    }
+    if (command.type === "planner.use" && page === "planner") openPage("timer");
+    return true;
   } catch (error) {
-    message.textContent = error.message || "The timer is unavailable. Try again.";
-    retry.hidden = false;
+    status.textContent = error.message || "Timebit is unavailable. Try again.";
+    retry.hidden = status !== byId("message");
     readAfter = Date.now() + 2_000;
+    return false;
   } finally {
     for (const control of controls) control.disabled = false;
     busy = false;
+    if (state) renderFeedbackSettings(state.settings);
+    if (volumeFocused && page === "notifications" && document.activeElement === document.body) byId("sound-volume").focus();
   }
 }
 
@@ -200,7 +364,51 @@ document.addEventListener("click", (event) => {
 });
 
 byId("mode").addEventListener("change", (event) => {
+  if (event.target.value === "planner") {
+    event.target.value = state.planner ? "planner" : state.timer.mode;
+    openPage("planner");
+    return;
+  }
   send({ type: "mode.select", mode: event.target.value, expectedRevision: state.revision });
+});
+
+plannerForm.addEventListener("input", () => {
+  byId("plan-error").textContent = "";
+  previewPlan(Date.now());
+});
+plannerForm.elements.mode.addEventListener("change", () => {
+  loadPlanPreferences();
+  previewPlan(Date.now());
+});
+plannerForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const now = Date.now();
+  const draft = planDraft(now);
+  const [error] = Object.entries(validatePlanDraft(draft, now));
+  const status = byId("plan-error");
+  if (error) {
+    status.textContent = error[1];
+    plannerForm.elements.namedItem(error[0]).focus();
+    return;
+  }
+  send({ type: "planner.use", draft, expectedRevision: state.revision }, { status });
+});
+
+byId("completion-notifications").addEventListener("change", (event) => {
+  send({ type: "notifications.set", enabled: event.target.checked, expectedRevision: state.revision });
+});
+
+byId("open-study-check-in").addEventListener("change", (event) => {
+  send({ type: "check-in.set", enabled: event.target.checked, expectedRevision: state.revision });
+});
+
+byId("mute-sounds").addEventListener("change", (event) => {
+  send({ type: "sound.mute", muted: event.target.checked, expectedRevision: state.revision });
+});
+
+byId("sound-volume").addEventListener("input", showVolume);
+byId("sound-volume").addEventListener("change", (event) => {
+  send({ type: "sound.volume", volume: event.target.valueAsNumber, expectedRevision: state.revision });
 });
 
 for (const form of forms) {
@@ -215,19 +423,47 @@ for (const form of forms) {
     };
     if (mode === "pomodoro") values.longBreakEvery = number("longBreakEvery");
     showErrors(form);
-    send({ type: "mode.save", mode, values, expectedRevision: state.revision }, form);
+    send({ type: "mode.save", mode, values, expectedRevision: state.revision }, { form });
   });
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[STATE_KEY]?.newValue) adopt(changes[STATE_KEY].newValue);
+window.addEventListener("hashchange", () => {
+  if (state && !toolbarPopup) openPage(location.hash.slice(1));
 });
 
 setInterval(() => {
-  if (state?.timer.status !== "running") return;
+  if (!state) return;
   const now = Date.now();
-  if (page === "timer") updateCountdown(now);
-  if (state.timer.endsAt <= now && now >= readAfter) send({ type: "state.get" });
+  if (page === "timer") updateTimerDisplay(now);
+  if (page === "planner") previewPlan(now);
+  const phaseExpired = state.timer.status === "running" && state.timer.endsAt <= now;
+  const planExpired = state.planner && state.timer.status !== "finished" && state.planner.finishAt <= now;
+  if ((phaseExpired || planExpired) && now >= readAfter) send({ type: "state.get" });
 }, 250);
 
-send({ type: "state.get" });
+chrome.action.getUserSettings().then(({ isOnToolbar }) => {
+  byId("pin-hint").hidden = isOnToolbar;
+}).catch(() => {});
+
+async function initialize() {
+  try {
+    toolbarPopup = !(await chrome.tabs.getCurrent());
+    if (toolbarPopup) {
+      const { [POPUP_ROUTE_KEY]: saved } = await chrome.storage.session.get(POPUP_ROUTE_KEY);
+      initialRoute = saved?.route ?? "timer";
+    }
+  } catch {
+    // The timer stays usable when Chrome cannot restore a popup route.
+  }
+  if (!toolbarPopup) initialRoute = location.hash.slice(1) || "timer";
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[STATE_KEY]?.newValue) adopt(changes[STATE_KEY].newValue);
+    if (area === "session" && toolbarPopup && changes[POPUP_ROUTE_KEY]?.newValue?.notificationRequest) {
+      initialRoute = "timer";
+      if (state && page !== "timer") openPage("timer", { remember: false });
+    }
+  });
+  await send({ type: "state.get" });
+}
+
+initialize();

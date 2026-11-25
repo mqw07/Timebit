@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { defaultSettings, MINUTE_MS, validateModeSettings } from "../extension/core/modes.js";
-import { applyCommand, createInitialState, nextPhase, reconcile, remainingMs } from "../extension/core/timer.js";
+import { applyCommand, createInitialState, formatOvertime, nextPhase, overtimeMs, reconcile, remainingMs } from "../extension/core/timer.js";
 
 const now = 1_800_000_000_000;
 const minutes = (value) => value * MINUTE_MS;
@@ -119,6 +119,33 @@ test("a late read completes only the expired running phase, exactly once", () =>
   assert.equal(recovered.timer.phase, "shortBreak");
   assert.equal(recovered.timer.status, "ready");
   assert.equal(reconcile(recovered, now + minutes(400)), recovered);
+});
+
+test("study and break overtime are based on the original deadline and keep the next phase ready", () => {
+  const running = apply(createInitialState(), "timer.start");
+  const late = running.timer.endsAt + 133_900;
+  const studyDone = reconcile(running, late);
+  assert.equal(studyDone.timer.expiredAt, running.timer.endsAt);
+  assert.equal(formatOvertime(overtimeMs(studyDone.timer, late)), "-02:13");
+  assert.equal(studyDone.timer.status, "ready");
+  assert.equal(remainingMs(studyDone.timer, late), minutes(5));
+  assert.equal(reconcile(studyDone, late + minutes(20)), studyDone);
+
+  for (const command of ["timer.reset", "timer.skip", "mode.select"]) {
+    const next = apply(studyDone, command, { mode: "cascade" }, late);
+    assert.equal(overtimeMs(next.timer, late), null);
+    assert.equal(next.timer.status, "ready");
+    assert.equal(next.studyIntervals, studyDone.studyIntervals);
+  }
+  const breakRunning = apply(studyDone, "timer.start", {}, late);
+  assert.equal(overtimeMs(breakRunning.timer, late), null);
+  assert.equal(breakRunning.timer.endsAt, late + minutes(5));
+  const breakDone = reconcile(breakRunning, breakRunning.timer.endsAt + 3_000);
+  assert.equal(breakDone.timer.completedPhase, "shortBreak");
+  assert.equal(breakDone.timer.phase, "study");
+  assert.equal(breakDone.timer.status, "ready");
+  assert.equal(overtimeMs(breakDone.timer, breakRunning.timer.endsAt + 3_000), 3_000);
+  assert.equal(breakDone.studyIntervals, studyDone.studyIntervals);
 });
 
 test("changing mode prepares its first phase and preserves counts and tasks", () => {

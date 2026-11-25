@@ -1,4 +1,5 @@
 export const MINUTE_MS = 60_000;
+export const DEFAULT_SOUND_VOLUME = 35;
 export const MODE_NAMES = Object.freeze({ pomodoro: "Pomodoro", cascade: "Cascade" });
 export const PHASE_NAMES = Object.freeze({
   study: "study",
@@ -9,6 +10,10 @@ export const PHASE_NAMES = Object.freeze({
 export function defaultSettings() {
   return {
     selectedMode: "pomodoro",
+    completionNotifications: true,
+    openStudyCheckIn: true,
+    soundMuted: false,
+    soundVolume: DEFAULT_SOUND_VOLUME,
     pomodoro: { study: 25, shortBreak: 5, longBreak: 15, longBreakEvery: 3 },
     cascade: { study: [50, 40, 30, 20, 10], shortBreak: 10, longBreak: 25 },
   };

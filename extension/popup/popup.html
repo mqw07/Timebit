@@ -9,7 +9,7 @@
 <body>
   <header class="toolbar">
     <img class="mark" src="../assets/timbit.svg" alt="" width="25" height="25">
-    <button class="icon-button gear" type="button" data-page="modes" aria-label="Timing settings" title="Timing settings">
+    <button class="icon-button gear" type="button" data-page="settings" aria-label="Settings" title="Settings">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
         <path d="m9 4 1-2h4l1 2 2 .9 2.2-.4 1.9 3.3-1.3 1.7v2.8l1.3 1.8-1.9 3.3-2.2-.4-2 1-1 2h-4l-1-2-2-1-2.2.4-1.9-3.3 1.3-1.8V9.5L2.9 7.8l1.9-3.3 2.2.4z" transform="translate(0 1)"/>
         <circle cx="12" cy="12" r="3.1"/>
@@ -20,17 +20,25 @@
     <p id="message" role="status" class="message">Loading timer…</p>
     <button id="retry" type="button" hidden>Retry</button>
     <section data-view="timer" class="timer-view" aria-label="Timer" hidden>
+      <h1 id="check-in-heading" tabindex="-1" hidden>Study block complete</h1>
       <select id="mode" aria-label="Timing mode">
         <option value="pomodoro">Pomodoro</option>
         <option value="cascade">Cascade</option>
+        <option value="planner">Finish-by plan</option>
       </select>
       <p id="phase" class="phase" aria-live="polite"></p>
+      <div id="plan-info" class="plan-info" hidden>
+        <p id="plan-deadline"></p>
+        <button id="edit-plan" type="button" class="back" data-page="planner">Edit plan</button>
+      </div>
+      <p id="plan-adjusted" class="helper" role="status" hidden></p>
       <div class="dial">
         <svg viewBox="0 0 144 144" aria-hidden="true">
           <circle class="track" cx="72" cy="72" r="65"/>
           <circle id="progress" cx="72" cy="72" r="65" pathLength="100" transform="rotate(-90 72 72)"/>
         </svg>
         <span id="countdown" role="timer"></span>
+        <span id="overtime-label" hidden>Overtime</span>
       </div>
       <p id="next" class="next"></p>
       <div class="timer-controls">
@@ -52,12 +60,95 @@
           </svg>
         </button>
       </div>
+      <label class="block-toggle"><input type="checkbox" data-block-setting> Block distractions</label>
+      <button id="missing-site-access" class="back" data-page="distractions" type="button" hidden>Manage site access</button>
+      <section class="checklist" aria-labelledby="checklist-heading">
+        <div class="checklist-header">
+          <h2 id="checklist-heading">Tasks</h2>
+          <button type="button" class="back" data-page="tasks">Manage tasks</button>
+        </div>
+        <div data-checklist></div>
+      </section>
+      <p id="pin-hint" class="pin-hint" hidden>Pin Timebit from Chrome’s Extensions menu to see minutes left.</p>
+      <p id="study-today" class="study-today"></p>
+    </section>
+
+    <section data-view="settings" hidden>
+      <button type="button" class="back" data-page="timer" aria-label="Back to timer">← <span>Timer</span></button>
+      <h1 tabindex="-1">Settings</h1>
+      <nav class="settings-list" aria-label="Settings">
+        <button type="button" class="settings-link" data-page="planner">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5h4"/></svg>
+          <span>Plan your time</span><span class="chevron" aria-hidden="true">&gt;</span>
+        </button>
+        <button type="button" class="settings-link" data-page="modes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span>Timing modes</span><span class="chevron" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="settings-link" data-page="settings/tasks">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 2 2 3-4m3 3h10M3 13l2 2 3-4m3 3h10M3 20h5m3 0h10"/></svg>
+          <span>Manage tasks</span><span class="chevron" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="settings-link" data-page="distractions">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>
+          <span>Distraction sites</span><span class="chevron" aria-hidden="true">&gt;</span>
+        </button>
+        <button type="button" class="settings-link" data-page="notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/></svg>
+          <span>Notifications &amp; sound</span><span class="chevron" aria-hidden="true">›</span>
+        </button>
+      </nav>
+    </section>
+
+    <section data-view="planner" hidden>
+      <button type="button" class="back" data-page="timer" aria-label="Back to timer">← <span>Timer</span></button>
+      <h1 tabindex="-1">Plan your time</h1>
+      <form id="planner-form" novalidate>
+        <div class="fields">
+          <div class="field plan-field">
+            <label for="plan-finish">Finish by</label>
+            <input id="plan-finish" name="finish" type="time" required aria-describedby="plan-available">
+          </div>
+          <p id="plan-available" class="helper"></p>
+          <div class="field plan-field">
+            <label for="plan-mode">Timing mode</label>
+            <select id="plan-mode" name="mode">
+              <option value="pomodoro">Pomodoro</option>
+              <option value="cascade">Cascade</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="plan-study">Study</label>
+            <input id="plan-study" name="study" type="number" step="any" min="1" required>
+            <span class="unit">min</span>
+          </div>
+          <div class="field">
+            <label for="plan-break">Break</label>
+            <input id="plan-break" name="shortBreak" type="number" step="any" min="1" required>
+            <span class="unit">min</span>
+          </div>
+        </div>
+        <p id="plan-summary" class="helper"></p>
+        <p class="helper">Start each block when you're ready. Waiting uses time from this plan.</p>
+        <p id="plan-replace" class="helper" hidden></p>
+        <p id="plan-error" class="field-error" role="status"></p>
+        <button type="submit" class="save">Use this plan</button>
+      </form>
+    </section>
+
+    <section data-view="tasks" hidden>
+      <button id="tasks-back" type="button" class="back" data-page="timer" aria-label="Back to timer">← <span>Timer</span></button>
+      <h1 tabindex="-1">Manage tasks</h1>
+      <div data-checklist></div>
+      <div class="task-actions">
+        <button id="clear-completed" type="button" disabled>Clear completed</button>
+        <button id="clear-all" type="button" disabled>Clear all</button>
+      </div>
     </section>
 
     <section data-view="modes" hidden>
-      <button type="button" class="back" data-page="timer">← <span>Timer</span></button>
+      <button type="button" class="back" data-page="settings" aria-label="Back to settings">← <span>Settings</span></button>
       <h1 tabindex="-1">Timing modes</h1>
-      <p class="intro">Choose a mode to adjust its timing.</p>
       <div class="mode-list">
         <button type="button" class="mode-card" data-page="pomodoro">
           <span><strong>Pomodoro</strong><span id="pomodoro-summary"></span><span id="pomodoro-long"></span></span>
@@ -70,8 +161,52 @@
       </div>
     </section>
 
+    <section data-view="distractions" hidden>
+      <button type="button" class="back" data-page="settings" aria-label="Back to settings">← <span>Settings</span></button>
+      <h1 tabindex="-1">Distraction sites</h1>
+      <label class="block-toggle"><input type="checkbox" data-block-setting> Block distractions</label>
+      <p class="helper">Sites are blocked only while your study timer is running.</p>
+      <ul id="distraction-sites" class="site-list" aria-label="Distraction sites"></ul>
+      <form id="add-distraction" class="task-add" novalidate>
+        <input name="domain" type="text" placeholder="Add a website" aria-label="Add a website" spellcheck="false" required>
+        <button type="submit">Add site</button>
+      </form>
+      <p id="distraction-message" class="message" role="status"></p>
+      <div id="distraction-presets" class="site-presets" hidden></div>
+    </section>
+
+    <section data-view="notifications" hidden>
+      <button type="button" class="back" data-page="settings" aria-label="Back to settings">← <span>Settings</span></button>
+      <h1 tabindex="-1">Notifications &amp; sound</h1>
+      <div class="feedback-settings">
+        <label class="feedback-row">
+          <span>Completion notifications</span>
+          <input id="completion-notifications" type="checkbox" data-feedback-setting>
+        </label>
+        <label class="feedback-row">
+          <span>Open study check-in</span>
+          <input id="open-study-check-in" type="checkbox" data-feedback-setting>
+        </label>
+        <div class="feedback-row">
+          <span>Soft chime</span>
+          <button id="preview-chime" type="button" aria-label="Preview chime" data-command="sound.preview">Play</button>
+        </div>
+        <div class="volume-setting">
+          <label for="sound-volume">Volume</label>
+          <div class="volume-control">
+            <input id="sound-volume" type="range" min="0" max="100" step="1" data-feedback-setting>
+            <output id="sound-volume-value" for="sound-volume"></output>
+          </div>
+        </div>
+        <label class="feedback-row">
+          <span>Mute sounds</span>
+          <input id="mute-sounds" type="checkbox" data-feedback-setting>
+        </label>
+      </div>
+    </section>
+
     <section data-view="pomodoro" hidden>
-      <button type="button" class="back" data-page="modes">← <span>Timing modes</span></button>
+      <button type="button" class="back" data-page="modes" aria-label="Back to timing modes">← <span>Timing modes</span></button>
       <h1 tabindex="-1">Pomodoro</h1>
       <p class="intro">Set your study and break lengths.</p>
       <form data-mode="pomodoro" novalidate>
@@ -82,7 +217,7 @@
     </section>
 
     <section data-view="cascade" hidden>
-      <button type="button" class="back" data-page="modes">← <span>Timing modes</span></button>
+      <button type="button" class="back" data-page="modes" aria-label="Back to timing modes">← <span>Timing modes</span></button>
       <h1 tabindex="-1">Cascade</h1>
       <form data-mode="cascade" novalidate>
         <fieldset>
@@ -97,6 +232,42 @@
       </form>
     </section>
   </main>
+  <template id="checklist-template">
+    <form class="task-add">
+      <input name="text" type="text" placeholder="New task" aria-label="New task" required>
+      <button type="submit">Add task</button>
+    </form>
+    <ul class="task-list" aria-label="Tasks" hidden></ul>
+  </template>
+  <template id="task-row-template">
+    <li class="task-row">
+      <label class="task-label"><input type="checkbox"><span></span></label>
+      <button type="button" data-task-action="edit">Edit</button>
+      <button type="button" data-task-action="delete">Delete</button>
+    </li>
+  </template>
+  <dialog id="edit-task" aria-labelledby="edit-task-title">
+    <h2 id="edit-task-title">Edit task</h2>
+    <form>
+      <label for="edit-task-text">Task name</label>
+      <input id="edit-task-text" name="text" type="text" required autofocus>
+      <p class="message" role="status"></p>
+      <div class="task-actions">
+        <button type="button" data-close-dialog>Cancel</button>
+        <button type="submit">Save task</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="clear-tasks" aria-labelledby="clear-tasks-title" aria-describedby="clear-tasks-detail">
+    <h2 id="clear-tasks-title">Clear all tasks?</h2>
+    <p id="clear-tasks-detail">This deletes every task on your list.</p>
+    <form>
+      <div class="task-actions">
+        <button type="button" data-close-dialog autofocus>Cancel</button>
+        <button type="submit">Clear all tasks</button>
+      </div>
+    </form>
+  </dialog>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

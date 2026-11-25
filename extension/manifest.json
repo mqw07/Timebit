@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Timebit",
-  "version": "0.1.1",
-  "description": "A study timer with Pomodoro and Cascade modes.",
+  "version": "0.4.0",
+  "description": "Study with Pomodoro, Cascade, or a finish-by plan and block distractions during focus time.",
   "minimum_chrome_version": "127",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "notifications", "offscreen", "declarativeNetRequestWithHostAccess"],
+  "optional_host_permissions": ["*://*/*"],
+  "web_accessible_resources": [
+    { "resources": ["redirect/index.html"], "matches": ["*://*/*"] }
+  ],
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
